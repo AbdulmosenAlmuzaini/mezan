@@ -5,15 +5,19 @@ from typing import List, Optional
 
 import requests
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker, relationship
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 try:
     from backend.ai import ai_service
@@ -22,18 +26,26 @@ except ImportError:
     from ai import ai_service
 
 # Database Setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./mizan.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mizan.db")
+# Fix for Railway internal Postgres URLs which might start with postgres:// instead of postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Security Setup
-SECRET_KEY = "mizan_secret_key_change_in_production"
+SECRET_KEY = os.getenv("JWT_SECRET", "mizan_secret_key_change_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+# Rate Limiting
+limiter = Limiter(key_func=get_remote_address)
 
 # Models
 class UserDB(Base):
@@ -179,10 +191,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
 # API
 app = FastAPI(title="Mizan API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -224,7 +240,8 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     return {"detail": "Email verified successfully"}
 
 @app.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -321,5 +338,14 @@ async def analyze_finances(transactions: List[TransactionBase], lang: str = "ar"
     analysis = ai_service.analyze_finances(summary, lang=lang)
     return analysis
 
+# Serve Frontend Static Files
+# This should be at the end to avoid intercepting API routes
+try:
+    app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+except Exception:
+    # Directory might not exist yet during initial dev
+    pass
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

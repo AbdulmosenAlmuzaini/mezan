@@ -1,59 +1,39 @@
-# Deployment Instructions - Mizan Platform
+# Production Deployment Guide - Mizan Platform
 
-This guide covers how to deploy the Mizan platform to **Railway**, as requested.
+This guide covers the specialized production setup for **Railway**, including PostgreSQL integration and security hardening.
 
 ## Prerequisites
 - A GitHub repository with the Mizan source code.
-- A [Railway.app](https://railway.app) account.
+- A [Railway.app](https://railway.app) account with a PostgreSQL service added.
 
-## Option 1: Automatic Deployment (Recommended)
+## Deployment Steps
 
-1.  **Push to GitHub**: Initialize a git repository and push your code to GitHub.
-    ```bash
-    git init
-    git add .
-    git commit -m "Initial commit"
-    git remote add origin <your-repo-url>
-    git push -u origin main
-    ```
-2.  **Connect to Railway**:
-    - Go to Railway and click "New Project" -> "Deploy from GitHub repo".
-    - Select your Mizan repository.
-3.  **Add Variables**:
-    - In the Railway project settings, add the variables from `.env.example`:
-        - `SECRET_KEY`: (generate a random string)
-        - `OPENROUTER_API_KEY`: (your API key)
-        - `VITE_API_BASE_URL`: (the URL of your backend service)
+1.  **Repository Setup**:
+    - Ensure your code is pushed to your GitHub repository.
+    - Railway will automatically detect the `Dockerfile` at the root.
 
-## Option 2: Docker Deployment
+2.  **Railway Configuration**:
+    - In your Railway project, click **"New" -> "Database" -> "Add PostgreSQL"**.
+    - Click on the Mizan service -> **"Variables"** -> **"New Variable"** -> **"Reference Variable"**.
+    - Link `DATABASE_URL` to the `DATABASE_URL` of your Postgres service.
 
-Mizan includes a `Dockerfile` (to be created) for containerized deployment.
+3.  **Required Variables**:
+    Add the following in Railway Settings:
+    - `ENV`: `production`
+    - `JWT_SECRET`: A long random string (e.g., `openssl rand -hex 32`)
+    - `OPENROUTER_API_KEY`: Your OpenRouter key.
+    - `PORT`: `8080` (Railway often sets this automatically).
 
-### Backend Dockerfile
-Create a `Dockerfile.backend`:
-```dockerfile
-FROM python:3.10-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-CMD ["uvicorn", "backend_api:app", "--host", "0.0.0.0", "--port", "8080"]
-```
+4.  **Database Migrations**:
+    The Dockerfile is configured to run `alembic upgrade head` automatically on startup. No manual action is required.
 
-### Frontend Dockerfile
-Create a `Dockerfile.frontend`:
-```dockerfile
-FROM node:18-slim
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-FROM nginx:alpine
-COPY --from=0 /app/dist /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-```
+5.  **Entrypoint Verification**:
+    The backend entrypoint is explicitly `backend_api:app`, and it serves the frontend static files from the `/dist` directory.
 
-## Database Note
-Currently, Mizan uses SQLite for simplicity. For production, it is recommended to switch `SQLALCHEMY_DATABASE_URL` to a PostgreSQL instance provided by Railway.
+## Security Features
+- **Rate Limiting**: The `/login` endpoint is limited to 5 requests per minute per IP.
+- **Postgres SSL**: Supported by default through `psycopg2-binary`.
+- **CORS**: Restricted via the `ALLOWED_ORIGINS` environment variable.
+
+## Live Demo
+Once you deploy, Railway will provide a public URL (e.g., `mizan-production.up.railway.app`). This becomes your live demo link.
