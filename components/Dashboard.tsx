@@ -446,19 +446,19 @@ const Dashboard: React.FC<Props> = ({
                 <div className="bg-gray-50/50 p-5 rounded-3xl border border-gray-100">
                   <h4 className="font-bold text-blue-700 flex items-center gap-2 mb-3 text-sm sm:text-base">
                     <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-                    الملخص العام
+                    {lang === 'ar' ? 'الملخص العام' : 'General Summary'}
                   </h4>
-                  <p className="text-gray-700 leading-relaxed text-base sm:text-lg">{analysis.summary}</p>
+                  <p className="text-gray-700 leading-relaxed text-sm sm:text-base">{analysis.summary}</p>
                 </div>
-                <div className="bg-red-50/30 p-5 rounded-3xl border border-red-50">
-                  <h4 className="font-bold text-red-600 flex items-center gap-2 mb-3 text-sm sm:text-base">
-                    <span className="w-2 h-2 bg-red-600 rounded-full"></span>
-                    تنبيهات المصاريف
+                <div className="bg-amber-50/50 p-5 rounded-3xl border border-amber-100">
+                  <h4 className="font-bold text-amber-600 flex items-center gap-2 mb-3 text-sm sm:text-base">
+                    <span className="w-2 h-2 bg-amber-600 rounded-full"></span>
+                    {lang === 'ar' ? 'رؤى مالية' : 'Financial Insights'}
                   </h4>
-                  <ul className="space-y-2 text-gray-700 text-sm sm:text-base">
-                    {analysis.hotspots.map((item, idx) => (
+                  <ul className="space-y-2 text-gray-700 text-xs sm:text-sm">
+                    {analysis.insights.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="mt-1.5 w-1.5 h-1.5 bg-red-400 rounded-full shrink-0"></span>
+                        <span className="mt-1.5 w-1.5 h-1.5 bg-amber-400 rounded-full shrink-0"></span>
                         {item}
                       </li>
                     ))}
@@ -467,31 +467,33 @@ const Dashboard: React.FC<Props> = ({
               </div>
 
               <div className="space-y-6">
+                <div className="bg-red-50/30 p-5 rounded-3xl border border-red-50">
+                  <h4 className="font-bold text-red-600 flex items-center gap-2 mb-3 text-sm sm:text-base">
+                    <span className="w-2 h-2 bg-red-600 rounded-full"></span>
+                    {lang === 'ar' ? 'تنبيهات' : 'Warnings'}
+                  </h4>
+                  <ul className="space-y-2 text-gray-700 text-xs sm:text-sm">
+                    {analysis.warnings.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="mt-1.5 w-1.5 h-1.5 bg-red-400 rounded-full shrink-0"></span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
                 <div className="bg-green-50/30 p-5 rounded-3xl border border-green-50">
                   <h4 className="font-bold text-green-700 flex items-center gap-2 mb-3 text-sm sm:text-base">
                     <span className="w-2 h-2 bg-green-600 rounded-full"></span>
-                    توصيات التوفير
+                    {lang === 'ar' ? 'إجراءات مقترحة' : 'Suggested Actions'}
                   </h4>
-                  <ul className="space-y-2 text-gray-700 text-sm sm:text-base">
-                    {analysis.savingsSuggestions.map((item, idx) => (
+                  <ul className="space-y-2 text-gray-700 text-xs sm:text-sm">
+                    {analysis.actions.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="mt-1.5 w-1.5 h-1.5 bg-green-400 rounded-full shrink-0"></span>
                         {item}
                       </li>
                     ))}
                   </ul>
-                </div>
-                <div className="bg-blue-50/30 p-5 rounded-3xl border border-blue-50">
-                  <h4 className="font-bold text-gray-800 mb-3 text-sm sm:text-base">تحليل النسبة</h4>
-                  <p className="text-sm sm:text-base text-gray-600 leading-relaxed">{analysis.ratioAdvice}</p>
-                  {analysis.riskAlerts.length > 0 && (
-                    <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                      <p className="text-xs font-bold text-amber-700 mb-2 uppercase tracking-wider">تنبيهات إضافية:</p>
-                      <ul className="text-xs text-amber-600 space-y-2">
-                        {analysis.riskAlerts.map((r, i) => <li key={i} className="flex items-center gap-2"><span>•</span>{r}</li>)}
-                      </ul>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

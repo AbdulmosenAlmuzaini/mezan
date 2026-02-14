@@ -1,7 +1,7 @@
 
 import { Transaction, User, AuthState, AnalysisResponse, Category, TransactionType } from '../types';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const getHeaders = () => {
     const token = localStorage.getItem('mizan_token');
@@ -179,32 +179,6 @@ export const apiService = {
         });
 
         if (!response.ok) throw new Error('AI Analysis failed');
-        const data = await response.json();
-
-        // The backend /analyze returns a string "analysis". 
-        // If we want it to match the object format expected by the frontend, 
-        // we might need to parse it or modify backend to return structured JSON.
-        // For now, let's assume the backend returns structured JSON if we want to wow the user,
-        // or we can just parse the string if it's bullet points.
-
-        // Actually, the original Gemini service returned a structured object.
-        // Our simplified backend /analyze returns a string.
-        // I'll update the backend to potentially return JSON or handle it here.
-        // Let's stick to the structured response by updating the backend logic or parsing.
-
-        // Wait, let's keep it simple for now and return a mock object if it's just a string, 
-        // OR better, I'll update the backend to return JSON.
-
-        try {
-            return JSON.parse(data.analysis);
-        } catch {
-            return {
-                summary: data.analysis,
-                hotspots: [],
-                ratioAdvice: "",
-                savingsSuggestions: [],
-                riskAlerts: []
-            };
-        }
+        return await response.json();
     }
 };

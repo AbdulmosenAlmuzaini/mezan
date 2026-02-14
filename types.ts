@@ -31,10 +31,9 @@ export interface AuthState {
 }
 
 export interface AnalysisResponse {
-  hotspots: string[];
-  ratioAdvice: string;
-  savingsSuggestions: string[];
-  riskAlerts: string[];
+  insights: string[];
+  warnings: string[];
+  actions: string[];
   summary: string;
 }
 
