@@ -30,10 +30,9 @@ class AIService:
         JSON Structure:
         {{
           "summary": "overview text",
-          "hotspots": ["point 1", "point 2"],
-          "ratioAdvice": "advice about income/expense ratio",
-          "savingsSuggestions": ["suggestion 1", "suggestion 2"],
-          "riskAlerts": ["alert 1"]
+          "insights": ["insight 1", "insight 2"],
+          "warnings": ["warning 1", "warning 2"],
+          "actions": ["action 1", "action 2"]
         }}
         """
 
@@ -66,18 +65,16 @@ class AIService:
             if lang == 'ar':
                 return {
                     "summary": "عذراً، خدمة التحليل الذكي واجهت مشكلة فنية.",
-                    "hotspots": ["يرجى المحاولة لاحقاً."],
-                    "ratioAdvice": "تأكد من مراجعة مصاريفك يدوياً حالياً.",
-                    "savingsSuggestions": [],
-                    "riskAlerts": ["فشل الاتصال بالذكاء الاصطناعي."]
+                    "insights": ["يرجى المحاولة لاحقاً."],
+                    "warnings": ["فشل الاتصال بالذكاء الاصطناعي."],
+                    "actions": ["تأكد من مراجعة مصاريفك يدوياً حالياً."]
                 }
             else:
                 return {
                     "summary": "Sorry, the smart analysis service encountered a technical issue.",
-                    "hotspots": ["Please try again later."],
-                    "ratioAdvice": "Make sure to review your expenses manually for now.",
-                    "savingsSuggestions": [],
-                    "riskAlerts": ["AI connection failed."]
+                    "insights": ["Please try again later."],
+                    "warnings": ["AI connection failed."],
+                    "actions": ["Make sure to review your expenses manually for now."]
                 }
 
 ai_service = AIService()
