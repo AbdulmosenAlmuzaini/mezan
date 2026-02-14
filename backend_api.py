@@ -79,6 +79,14 @@ class TransactionDB(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("UserDB", back_populates="transactions")
 
+# Table Creation Fallback (Safe for production)
+try:
+    print(f"Initializing database: {DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else DATABASE_URL}")
+    Base.metadata.create_all(bind=engine)
+    print("Database initialization successful or already initialized.")
+except Exception as e:
+    print(f"Warning: Database creation_all failed: {e}")
+
 # Pydantic Schemas
 class TransactionBase(BaseModel):
     title: str
@@ -202,8 +210,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
 @app.post("/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(get_db)):
+    print(f"Registration attempt for: {user.email}")
     db_user = db.query(UserDB).filter(UserDB.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
