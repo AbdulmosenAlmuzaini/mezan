@@ -25,7 +25,7 @@ export const apiService = {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Login failed');
+            throw new Error(error.message || error.detail || 'Login failed');
         }
 
         const data = await response.json();
@@ -34,7 +34,7 @@ export const apiService = {
         return data;
     },
 
-    register: async (name: string, email: string, password: string): Promise<{ user: User, access_token: string }> => {
+    register: async (name: string, email: string, password: string): Promise<{ success: boolean, message: string }> => {
         const response = await fetch(`${API_URL}/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -43,13 +43,10 @@ export const apiService = {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Registration failed');
+            throw new Error(error.message || error.detail || 'Registration failed');
         }
 
-        const data = await response.json();
-        localStorage.setItem('mizan_token', data.access_token);
-        localStorage.setItem('mizan_user', JSON.stringify(data.user));
-        return data;
+        return await response.json();
     },
 
     logout: () => {

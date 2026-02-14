@@ -10,8 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError, jwt
+import re
+import secrets
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, validator
+from fastapi.responses import JSONResponse
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker, relationship
@@ -41,7 +44,7 @@ SECRET_KEY = os.getenv("JWT_SECRET", "mizan_secret_key_change_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # Rate Limiting
@@ -57,6 +60,8 @@ class UserDB(Base):
     is_verified = Column(Integer, default=0) # 0: false, 1: true
     verification_token = Column(String, nullable=True)
     reset_token = Column(String, nullable=True)
+    failed_login_attempts = Column(Integer, default=0)
+    lockout_until = Column(DateTime, nullable=True)
     transactions = relationship("TransactionDB", back_populates="owner")
     categories = relationship("CategoryDB", back_populates="owner")
 
@@ -155,10 +160,32 @@ def get_db():
         db.close()
 
 def get_password_hash(password):
+    # Safety check: Argon2 (via passlib) handles long passwords fine, 
+    # but we validate length explicitly to prevent any potential issues.
+    if len(password) > 128:
+        raise ValueError("Password is too long.")
     return pwd_context.hash(password)
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
+
+def validate_password_strength(password: str):
+    """
+    Enforces fintech-level password security.
+    """
+    if len(password) < 8:
+        return "Password must be at least 8 characters long."
+    if len(password) > 128:
+        return "Password is too long."
+    if not re.search(r"[A-Z]", password):
+        return "Password must contain at least one uppercase letter."
+    if not re.search(r"[a-z]", password):
+        return "Password must contain at least one lowercase letter."
+    if not re.search(r"\d", password):
+        return "Password must contain at least one number."
+    if not re.search(r"[@$!%*?&]", password):
+        return "Password must contain at least one special character (@$!%*?&)."
+    return None
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -190,7 +217,27 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 # API
 app = FastAPI(title="Mizan API")
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Global Exception Handler for Standardized JSON Errors
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": str(exc.detail)
+        }
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    print(f"Unhandled Exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "Internal server error. Please try again later."
+        }
+    )
 
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
@@ -206,30 +253,44 @@ app.add_middleware(
 def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
-@app.post("/register", response_model=Token)
+@app.post("/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     print(f"Registration attempt for: {user.email}")
     db_user = db.query(UserDB).filter(UserDB.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    hashed_password = get_password_hash(user.password)
+    # Password Policy Validation
+    error_message = validate_password_strength(user.password)
+    if error_message:
+        raise HTTPException(status_code=400, detail=error_message)
+    
+    try:
+        hashed_password = get_password_hash(user.password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     verification_token = generate_token()
     new_user = UserDB(
         email=user.email, 
         name=user.name, 
         hashed_password=hashed_password,
-        verification_token=verification_token
+        verification_token=verification_token,
+        is_verified=0
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     
     # Log the verification link (simulating email send)
+    # In a real fintech app, use AWS SES / SendGrid
     print(f"VERIFICATION LINK for {new_user.email}: http://localhost:3000/verify/{verification_token}")
     
-    access_token = create_access_token(data={"sub": new_user.email})
-    return {"access_token": access_token, "token_type": "bearer", "user": new_user}
+    return {
+        "success": True,
+        "message": "Account created. Please verify your email before logging in.",
+        "user_id": new_user.id
+    }
 
 @app.get("/verify-email/{token}")
 def verify_email(token: str, db: Session = Depends(get_db)):
@@ -246,12 +307,51 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 @limiter.limit("5/minute")
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Check for account lockout
+    if user.lockout_until and user.lockout_until > datetime.utcnow():
+        wait_minutes = int((user.lockout_until - datetime.utcnow()).total_seconds() / 60) + 1
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Account locked due to multiple failed attempts. Please try again in {wait_minutes} minutes."
+        )
+
+    if not verify_password(form_data.password, user.hashed_password):
+        # Handle failed attempt
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= 5:
+            user.lockout_until = datetime.utcnow() + timedelta(minutes=15)
+            user.failed_login_attempts = 0 # Reset for next cycle
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Too many failed attempts. Account has been locked for 15 minutes."
+            )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email address before logging in."
+        )
+    
+    # Successful login: Reset failed attempts and lockout
+    user.failed_login_attempts = 0
+    user.lockout_until = None
+    db.commit()
+        
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 

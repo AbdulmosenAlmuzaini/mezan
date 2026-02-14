@@ -57,23 +57,37 @@ const App: React.FC = () => {
     }
   }, [auth.isAuthenticated]);
 
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     try {
       const data = await apiService.login(email, password);
-      setAuth({ user: data.user, isAuthenticated: true });
+      // Backend returns User with is_verified (int)
+      // Frontend expects User with isVerified (boolean)
+      const user: User = {
+        ...data.user,
+        isVerified: !!(data.user as any).is_verified
+      };
+      setAuth({ user, isAuthenticated: true });
     } catch (err: any) {
-      alert(err.message);
+      setAuthError(err.message);
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
     try {
-      const data = await apiService.register(name, email, password);
-      setAuth({ user: data.user, isAuthenticated: true });
+      const result = await apiService.register(name, email, password);
+      setAuthSuccess(result.message);
+      setIsLoginView(true);
+      setPassword('');
     } catch (err: any) {
-      alert(err.message);
+      setAuthError(err.message);
     }
   };
 
@@ -132,6 +146,18 @@ const App: React.FC = () => {
             </div>
 
             <form onSubmit={isLoginView ? handleLogin : handleRegister} className="space-y-4">
+              {authError && (
+                <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+                  <ShieldAlert size={18} />
+                  <span>{authError}</span>
+                </div>
+              )}
+              {authSuccess && (
+                <div className="p-3 bg-green-50 border border-green-100 text-green-600 text-sm rounded-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+                  <CheckCircle2 size={18} />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
               {!isLoginView && (
                 <div>
                   <label className="block text-sm font-medium mb-1 text-gray-700">الاسم الكامل</label>
@@ -195,7 +221,7 @@ const App: React.FC = () => {
       {verificationStatus !== 'idle' && (
         <div className="fixed top-0 left-0 right-0 z-[100] animate-in slide-in-from-top duration-300">
           <div className={`p-4 flex items-center justify-center gap-2 text-white font-bold shadow-lg ${verificationStatus === 'loading' ? 'bg-blue-600' :
-              verificationStatus === 'success' ? 'bg-green-600' : 'bg-red-600'
+            verificationStatus === 'success' ? 'bg-green-600' : 'bg-red-600'
             }`}>
             {verificationStatus === 'loading' && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
             {verificationStatus === 'success' && <CheckCircle2 size={20} />}
