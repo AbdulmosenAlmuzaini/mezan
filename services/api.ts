@@ -29,9 +29,16 @@ export const apiService = {
         }
 
         const data = await response.json();
+
+        // Map backend underscore names to frontend camelCase
+        const user: User = {
+            ...data.user,
+            isVerified: !!(data.user as any).is_verified
+        };
+
         localStorage.setItem('mizan_token', data.access_token);
-        localStorage.setItem('mizan_user', JSON.stringify(data.user));
-        return data;
+        localStorage.setItem('mizan_user', JSON.stringify(user));
+        return { ...data, user };
     },
 
     register: async (name: string, email: string, password: string): Promise<{ success: boolean, message: string }> => {

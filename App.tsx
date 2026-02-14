@@ -8,9 +8,19 @@ import { AuthState, Transaction, TransactionType, User } from './types';
 import { LogIn, UserPlus, Wallet, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const initialUser = localStorage.getItem('mizan_user');
+  const getInitialUser = () => {
+    const data = localStorage.getItem('mizan_user');
+    if (!data || data === 'undefined' || data === 'null') return null;
+    try {
+      return JSON.parse(data);
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+      return null;
+    }
+  };
+
   const [auth, setAuth] = useState<AuthState>({
-    user: initialUser ? JSON.parse(initialUser) : null,
+    user: getInitialUser(),
     isAuthenticated: !!localStorage.getItem('mizan_token')
   });
 
@@ -65,13 +75,8 @@ const App: React.FC = () => {
     setAuthError(null);
     try {
       const data = await apiService.login(email, password);
-      // Backend returns User with is_verified (int)
-      // Frontend expects User with isVerified (boolean)
-      const user: User = {
-        ...data.user,
-        isVerified: !!(data.user as any).is_verified
-      };
-      setAuth({ user, isAuthenticated: true });
+      // apiService.login now returns correctly mapped User object
+      setAuth({ user: data.user, isAuthenticated: true });
     } catch (err: any) {
       setAuthError(err.message);
     }
