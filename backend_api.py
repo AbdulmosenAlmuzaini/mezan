@@ -79,14 +79,6 @@ class TransactionDB(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("UserDB", back_populates="transactions")
 
-# Table Creation Fallback (Safe for production)
-try:
-    print(f"Initializing database: {DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else DATABASE_URL}")
-    Base.metadata.create_all(bind=engine)
-    print("Database initialization successful or already initialized.")
-except Exception as e:
-    print(f"Warning: Database creation_all failed: {e}")
-
 # Pydantic Schemas
 class TransactionBase(BaseModel):
     title: str
