@@ -79,8 +79,6 @@ class TransactionDB(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("UserDB", back_populates="transactions")
 
-Base.metadata.create_all(bind=engine)
-
 # Pydantic Schemas
 class TransactionBase(BaseModel):
     title: str
